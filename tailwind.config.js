@@ -1,0 +1,55 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
+  theme: {
+    extend: {
+      colors: {
+        background: {
+          primary: "var(--bg-primary)",
+          secondary: "var(--bg-secondary)",
+        },
+        "bg-dark": "var(--bg-dark)",
+        text: {
+          primary: "var(--text-primary)",
+          secondary: "var(--text-secondary)",
+          "on-dark": "var(--text-on-dark)",
+        },
+        accent: "var(--accent)",
+        "accent-hover": "var(--accent-hover)",
+        "accent-light": "var(--accent-light)",
+        "low-risk-bg": "var(--low-risk-bg)",
+        "low-risk-badge": "var(--low-risk-badge)",
+        "low-risk-border": "var(--low-risk-border)",
+        "mod-risk-bg": "var(--mod-risk-bg)",
+        "mod-risk-badge": "var(--mod-risk-badge)",
+        "mod-risk-border": "var(--mod-risk-border)",
+        "high-risk-bg": "var(--high-risk-bg)",
+        "high-risk-badge": "var(--high-risk-badge)",
+        "high-risk-border": "var(--high-risk-border)",
+        "tag-base-bg": "var(--tag-base-bg)",
+        "tag-base-text": "var(--tag-base-text)",
+        "tag-incentive-bg": "var(--tag-incentive-bg)",
+        "tag-incentive-text": "var(--tag-incentive-text)",
+        "tag-expiry-bg": "var(--tag-expiry-bg)",
+        "tag-expiry-text": "var(--tag-expiry-text)",
+        "tag-boost-bg": "var(--tag-boost-bg)",
+        "tag-boost-text": "var(--tag-boost-text)",
+        "tag-warning-bg": "var(--tag-warning-bg)",
+        "tag-warning-text": "var(--tag-warning-text)",
+        "tag-clean-bg": "var(--tag-clean-bg)",
+        "tag-clean-text": "var(--tag-clean-text)",
+        border: "var(--border)",
+      },
+      boxShadow: {
+        card: "var(--shadow-card)",
+        hover: "var(--shadow-hover)",
+      },
+      fontFamily: {
+        sans: ['"DM Sans"', "sans-serif"],
+        display: ['"Fraunces"', "serif"],
+        mono: ['"DM Mono"', "monospace"],
+      },
+    },
+  },
+  plugins: [],
+};

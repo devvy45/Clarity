@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Clarity Insight",
+  "version": "2.0",
+  "description": "Shows better-rate context on Aave and links to Clarity comparison.",
+  "permissions": ["storage"],
+  "content_scripts": [
+    {
+      "matches": ["*://app.aave.com/*"],
+      "js": ["content.js"],
+      "css": []
+    }
+  ],
+  "host_permissions": [
+    "*://app.aave.com/*",
+    "*://localhost/*",
+    "*://yields.llama.fi/*"
+  ]
+}

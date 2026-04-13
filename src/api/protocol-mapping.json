@@ -1,0 +1,26 @@
+{
+  "aave-v3": {
+    "llamaProject": "aave-v3",
+    "llamaProtocolSlug": "aave-v3"
+  },
+  "morpho-v1": {
+    "llamaProject": "morpho-v1",
+    "llamaProtocolSlug": "morpho-v1"
+  },
+  "pendle": {
+    "llamaProject": "pendle",
+    "llamaProtocolSlug": "pendle"
+  },
+  "upshift": {
+    "llamaProject": "upshift",
+    "llamaProtocolSlug": "upshift"
+  },
+  "yo-protocol": {
+    "llamaProject": "yo-protocol",
+    "llamaProtocolSlug": "yo-protocol"
+  },
+  "ether.fi-stake": {
+    "llamaProject": "ether.fi-stake",
+    "llamaProtocolSlug": "ether.fi-stake"
+  }
+}

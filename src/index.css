@@ -1,0 +1,72 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&display=swap");
+@import "tailwindcss";
+@config "../tailwind.config.js";
+
+@layer base {
+  :root {
+    --bg-primary: #f8f4ef;
+    --bg-secondary: #f0ebe3;
+    --bg-dark: #1a2e1f;
+    --text-primary: #1c1917;
+    --text-secondary: #6b6560;
+    --text-on-dark: #e8f0e9;
+    --accent: #2d6a4f;
+    --accent-hover: #1e4d38;
+    --accent-light: #d8f3dc;
+    --low-risk-bg: #f0fdf4;
+    --low-risk-badge: #166534;
+    --low-risk-border: #bbf7d0;
+    --mod-risk-bg: #fffbeb;
+    --mod-risk-badge: #92400e;
+    --mod-risk-border: #fde68a;
+    --high-risk-bg: #fff5f5;
+    --high-risk-badge: #991b1b;
+    --high-risk-border: #fecaca;
+    --tag-base-bg: #eef2ff;
+    --tag-base-text: #3730a3;
+    --tag-incentive-bg: #fffbeb;
+    --tag-incentive-text: #92400e;
+    --tag-expiry-bg: #fef3c7;
+    --tag-expiry-text: #78350f;
+    --tag-boost-bg: #f0fdf4;
+    --tag-boost-text: #166534;
+    --tag-warning-bg: #fff7ed;
+    --tag-warning-text: #9a3412;
+    --tag-clean-bg: #ecfdf5;
+    --tag-clean-text: #065f46;
+    --border: #e5ddd5;
+    --shadow-card: 0 2px 8px rgba(28, 25, 23, 0.06);
+    --shadow-hover: 0 8px 24px rgba(28, 25, 23, 0.1);
+  }
+
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: "DM Sans", sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  .font-display {
+    font-family: "Fraunces", serif;
+  }
+
+  .font-mono {
+    font-family: "DM Mono", monospace;
+  }
+
+  a {
+    color: inherit;
+  }
+}

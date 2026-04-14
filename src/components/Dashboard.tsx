@@ -143,7 +143,7 @@ export function Dashboard({
 
       {warnings.length > 0 && (
         <div className="mb-4 rounded-[8px] border border-tag-warning-bg bg-tag-warning-bg/50 px-3 py-2 text-sm text-tag-warning-text">
-          APY incentive end dates are partially unavailable in the free DeFiLlama tier. We mark those rows clearly.
+
         </div>
       )}
 

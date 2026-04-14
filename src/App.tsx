@@ -63,24 +63,7 @@ function App() {
             <span className="inline-block h-3 w-3 rounded-[2px] bg-accent-light" />
             <p className="font-display text-[30px] leading-none text-text-on-dark">Clarity</p>
           </div>
-          <nav className="hidden items-center gap-5 text-sm text-text-on-dark md:flex">
-            <a href="#dashboard" className="hover:text-white">
-              Marketplace
-            </a>
-            <a href="#how-it-works" className="hover:text-white">
-              How It Works
-            </a>
-            <a href="#methodology" className="hover:text-white">
-              Methodology
-            </a>
-          </nav>
-          <button
-            type="button"
-            className="rounded-[8px] border border-text-on-dark/30 px-3 py-2 text-sm font-semibold text-text-on-dark hover:border-text-on-dark"
-            onClick={() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" })}
-          >
-            Find my fit
-          </button>
+
         </div>
       </header>
 

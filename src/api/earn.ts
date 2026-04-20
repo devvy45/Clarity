@@ -1,11 +1,9 @@
 import protocolMappingJson from "./protocol-mapping.json";
 import protocolMetaJson from "./protocols.json";
 
-const LIFI_VAULTS_ENDPOINT = "https://earn.li.fi/v1/earn/vaults";
-const LLAMA_POOLS_ENDPOINT = "https://yields.llama.fi/pools";
-const LLAMA_PROTOCOLS_ENDPOINT = "https://api.llama.fi/protocols";
+const LIFI_VAULTS_ENDPOINT = "/api/lifi/vaults";
 const LLAMA_CHART_ENDPOINT = "https://yields.llama.fi/chart";
-const LIFI_INTEGRATOR = "clarity-mullet-hack";
+const LIFI_PAGE_SIZE = 50;
 
 const STABLE_TOKENS = new Set([
   "USDC",
@@ -40,6 +38,7 @@ interface LifiToken {
   symbol: string;
   address: string;
   decimals: number;
+  weight?: number;
 }
 
 interface LifiVault {
@@ -51,24 +50,28 @@ interface LifiVault {
   description?: string;
   protocol: {
     name: string;
+    logoUri?: string;
     url: string;
   };
   tags: string[];
   underlyingTokens: LifiToken[];
   analytics: {
     apy: {
-      base: number;
+      base: number | null;
       reward: number | null;
-      total: number;
+      total: number | null;
     };
     apy1d?: number | null;
     apy7d?: number | null;
     apy30d?: number | null;
     tvl: {
       usd: string;
+      native?: string;
     };
     updatedAt?: string;
   };
+  timeLock?: number | null;
+  syncedAt?: string;
   depositPacks?: Array<{ name: string; stepsType: string }>;
   redeemPacks?: Array<{ name: string; stepsType: string }>;
   isTransactional: boolean;
@@ -77,32 +80,8 @@ interface LifiVault {
 
 interface LifiVaultResponse {
   data: LifiVault[];
-}
-
-interface LlamaPool {
-  chain: string;
-  project: string;
-  symbol: string;
-  apy: number | null;
-  apyBase: number | null;
-  apyReward: number | null;
-  apyMean30d: number | null;
-  il7d: number | null;
-  ilRisk: string | null;
-  tvlUsd: number | null;
-  rewardTokens: string[] | null;
-  pool: string;
-}
-
-interface LlamaPoolResponse {
-  data: LlamaPool[];
-}
-
-interface LlamaProtocol {
-  slug: string;
-  name: string;
-  listedAt?: number;
-  tvl?: number;
+  nextCursor?: string | null;
+  total?: number;
 }
 
 interface ProtocolMapping {
@@ -169,6 +148,7 @@ export interface ClarityVault {
   protocolSlug: string;
   protocolDisplayName: string;
   protocolUrl: string;
+  protocolLogoPath: string | null;
   plainEnglishName: string;
   tradfiAnalogy: string;
   lockCategory: LockCategory;
@@ -198,6 +178,8 @@ export interface ClaritySnapshot {
   fetchedAt: number;
   latestSyncISO: string | null;
   warnings: string[];
+  nextCursor: string | null;
+  totalVaults: number | null;
 }
 
 interface LlamaChartResponse {
@@ -211,6 +193,32 @@ interface LlamaChartResponse {
 const protocolMapping = protocolMappingJson as Record<string, ProtocolMapping>;
 const protocolMeta = protocolMetaJson as Record<string, ProtocolMeta>;
 const chartCache = new Map<string, ChartPoint[]>();
+const protocolLogoBySlug: Record<string, string> = {
+  "aave-v3": "/AAVE.png",
+  "ether.fi-stake": "/ETHER.webp",
+  "ethena-usde": "/ethena.svg",
+  "euler-v2": "/EULER.png",
+  maple: "/MAPLE.svg",
+  "morpho-v1": "/MORPHO.svg",
+  neverland: "/NEVERLAND.svg",
+  pendle: "/PENDLE.svg",
+  upshift: "/upshift.svg",
+  "yo-protocol": "/YO.png",
+};
+const protocolSlugAliases: Record<string, string> = {
+  aave: "aave-v3",
+  "aave v3": "aave-v3",
+  "ether.fi": "ether.fi-stake",
+  etherfi: "ether.fi-stake",
+  ethena: "ethena-usde",
+  euler: "euler-v2",
+  maple: "maple",
+  morpho: "morpho-v1",
+  neverland: "neverland",
+  pendle: "pendle",
+  upshift: "upshift",
+  "yo protocol": "yo-protocol",
+};
 
 function asNumber(value: unknown, fallback = 0): number {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -225,15 +233,18 @@ function asNumber(value: unknown, fallback = 0): number {
   return fallback;
 }
 
-function normalizeSymbol(symbol: string): string {
-  return symbol.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
-}
-
-function normalizeChain(chain: string): string {
-  return chain.replace(/\s+/g, "").toLowerCase();
-}
-
 function resolveLockCategory(vault: LifiVault): { category: LockCategory; label: string } {
+  const lockSeconds = asNumber(vault.timeLock, 0);
+  if (lockSeconds > 0) {
+    const lockDays = lockSeconds / 86400;
+    if (lockDays <= 7) {
+      return { category: "up_to_7_days", label: "Up to 7 days" };
+    }
+    if (lockDays <= 30) {
+      return { category: "up_to_30_days", label: "Up to 30 days" };
+    }
+    return { category: "thirty_plus_days", label: "Locked for 30+ days" };
+  }
   if (vault.isRedeemable) {
     return { category: "withdraw_anytime", label: "Withdraw anytime" };
   }
@@ -255,12 +266,14 @@ function buildRealMoneyLabel(principal: number, apyBreakdown: APYBreakdown): str
   const yearlyUSD = principal * (apyBreakdown.base / 100);
   const monthlyUSD = yearlyUSD / 12;
   const equivalents = [
-    { monthlyUSD: 8, label: "a streaming subscription" },
-    { monthlyUSD: 15, label: "your monthly streaming bundle" },
-    { monthlyUSD: 50, label: "a week of groceries" },
-    { monthlyUSD: 100, label: "your electricity bill" },
-    { monthlyUSD: 200, label: "a short domestic flight" },
-    { monthlyUSD: 500, label: "a month of rent in a tier-2 city" },
+    { monthlyUSD: 5, label: "a small app subscription" },
+    { monthlyUSD: 12, label: "a streaming plan" },
+    { monthlyUSD: 25, label: "a useful AI or design tool" },
+    { monthlyUSD: 50, label: "a weekly grocery top-up" },
+    { monthlyUSD: 100, label: "a utility bill" },
+    { monthlyUSD: 180, label: "a stack of SaaS subscriptions" },
+    { monthlyUSD: 350, label: "a coworking desk" },
+    { monthlyUSD: 700, label: "a rent-sized monthly offset" },
   ];
 
   const closest = [...equivalents].sort(
@@ -268,6 +281,10 @@ function buildRealMoneyLabel(principal: number, apyBreakdown: APYBreakdown): str
   )[0];
 
   return `On $${principal.toLocaleString()} that's ~$${Math.round(yearlyUSD)}/year — about ${closest.label} every month`;
+}
+
+function normalizeApy(value: unknown): number {
+  return asNumber(value, 0);
 }
 
 function riskLabelFromTier(tier: RiskTier): RiskLabel {
@@ -292,38 +309,27 @@ function resolveSafetyNote(meta: ProtocolMeta, tier: RiskTier): string {
 
 function buildAPYBreakdown(
   vault: LifiVault,
-  pool: LlamaPool | null,
   meta: ProtocolMeta,
 ): APYBreakdown {
-  const base = asNumber(pool?.apyBase, asNumber(vault.analytics.apy.base, 0));
-  const incentive = asNumber(pool?.apyReward, asNumber(vault.analytics.apy.reward, 0));
+  const base = normalizeApy(vault.analytics.apy.base);
+  const incentive = normalizeApy(vault.analytics.apy.reward);
   const boost = asNumber(meta.apyBoostAmount, 0);
-  const total = Math.max(base + incentive + boost, 0);
+  const reportedTotal = normalizeApy(vault.analytics.apy.total);
+  const total = Math.max(reportedTotal || base + incentive + boost, 0);
   const incentiveEndDate = meta.incentiveEndDate ?? null;
-
-  const rewardTokens = pool?.rewardTokens ?? [];
-  const incentiveToken = rewardTokens.length > 0 && !rewardTokens[0].startsWith("0x")
-    ? rewardTokens[0]
-    : null;
-  const incentiveTokenIsVolatile = Boolean(
-    incentiveToken && !STABLE_TOKENS.has(incentiveToken.toUpperCase()),
-  );
-
-  const ilAmount = pool?.il7d ?? null;
-  const ilRisk = Boolean((pool?.ilRisk && pool.ilRisk !== "no") || (ilAmount !== null && ilAmount !== 0));
 
   return {
     base,
     incentive,
     incentiveEndDate,
-    incentiveToken,
-    incentiveTokenIsVolatile,
+    incentiveToken: null,
+    incentiveTokenIsVolatile: false,
     boost,
     boostRequires: meta.apyBoostRequires ?? null,
     total,
     isClean: incentive <= 0 && boost <= 0,
-    ilRisk,
-    ilAmount,
+    ilRisk: vault.tags.some((tag) => /lp|pool/i.test(tag)),
+    ilAmount: null,
   };
 }
 
@@ -401,38 +407,6 @@ function resolveAPYType(breakdown: APYBreakdown): APYType {
   return "base_only";
 }
 
-function matchLlamaPool(vault: LifiVault, poolsByProject: Map<string, LlamaPool[]>) {
-  const mapping = protocolMapping[vault.protocol.name];
-  const project = mapping?.llamaProject ?? vault.protocol.name;
-  const candidates = poolsByProject.get(project) ?? [];
-  if (candidates.length === 0) {
-    return null;
-  }
-
-  const tokenSymbol = normalizeSymbol(vault.underlyingTokens[0]?.symbol ?? vault.name);
-  const chainName = normalizeChain(vault.network);
-
-  const ranked = [...candidates].sort((a, b) => {
-    const aChainScore = normalizeChain(a.chain) === chainName ? 2 : 0;
-    const bChainScore = normalizeChain(b.chain) === chainName ? 2 : 0;
-    const aSymbolScore = normalizeSymbol(a.symbol) === tokenSymbol ? 2 : 0;
-    const bSymbolScore = normalizeSymbol(b.symbol) === tokenSymbol ? 2 : 0;
-    const aDiff = Math.abs(asNumber(a.apy, 0) - asNumber(vault.analytics.apy.total, 0));
-    const bDiff = Math.abs(asNumber(b.apy, 0) - asNumber(vault.analytics.apy.total, 0));
-    const aScore = aChainScore + aSymbolScore;
-    const bScore = bChainScore + bSymbolScore;
-    if (aScore !== bScore) {
-      return bScore - aScore;
-    }
-    if (aDiff !== bDiff) {
-      return aDiff - bDiff;
-    }
-    return asNumber(b.tvlUsd, 0) - asNumber(a.tvlUsd, 0);
-  });
-
-  return ranked[0];
-}
-
 function buildVaultName(symbol: string, tierLabel: RiskLabel): string {
   if (STABLE_TOKENS.has(symbol.toUpperCase())) {
     return `${symbol.toUpperCase()} Savings — ${tierLabel}`;
@@ -455,14 +429,14 @@ function launchYearLabel(launchDate: number | null): { label: string; yearsLive:
   };
 }
 
-function tvlTrendLabel(pool: LlamaPool | null): string {
-  if (!pool?.tvlUsd) {
+function tvlTrendLabel(tvlUsd: number): string {
+  if (!tvlUsd) {
     return "TVL trend unavailable";
   }
-  if (pool.tvlUsd > 1_000_000_000) {
+  if (tvlUsd > 1_000_000_000) {
     return "Large deposit base";
   }
-  if (pool.tvlUsd > 100_000_000) {
+  if (tvlUsd > 100_000_000) {
     return "Healthy deposit base";
   }
   return "Smaller deposit base";
@@ -479,8 +453,13 @@ function rewardWarningLabel(breakdown: APYBreakdown): string | null {
 }
 
 function protocolSlugFrom(vault: LifiVault): string {
-  const mapping = protocolMapping[vault.protocol.name];
-  return mapping?.llamaProtocolSlug ?? vault.protocol.name;
+  const normalizedName = vault.protocol.name.toLowerCase();
+  const mapping = protocolMapping[vault.protocol.name] ?? protocolMapping[normalizedName];
+  return mapping?.llamaProtocolSlug ?? protocolSlugAliases[normalizedName] ?? normalizedName;
+}
+
+function protocolLogoPath(slug: string): string | null {
+  return protocolLogoBySlug[slug] ?? null;
 }
 
 export function getLockCategoryLabel(category: LockCategory): string {
@@ -496,62 +475,23 @@ export function getLockCategoryLabel(category: LockCategory): string {
   return "30+ days";
 }
 
-export async function fetchClaritySnapshot(): Promise<ClaritySnapshot> {
-  const warnings: string[] = [];
-  const [vaultsResp, poolsResp, protocolsResp] = await Promise.all([
-    fetch(LIFI_VAULTS_ENDPOINT, { headers: { "x-lifi-integrator": LIFI_INTEGRATOR } }),
-    fetch(LLAMA_POOLS_ENDPOINT),
-    fetch(LLAMA_PROTOCOLS_ENDPOINT),
-  ]);
-
-  if (!vaultsResp.ok) {
-    throw new Error(`LI.FI vault request failed with status ${vaultsResp.status}`);
-  }
-  if (!poolsResp.ok) {
-    throw new Error(`DeFiLlama pools request failed with status ${poolsResp.status}`);
-  }
-  if (!protocolsResp.ok) {
-    throw new Error(`DeFiLlama protocols request failed with status ${protocolsResp.status}`);
-  }
-
-  const vaultPayload = (await vaultsResp.json()) as LifiVaultResponse;
-  const poolsPayload = (await poolsResp.json()) as LlamaPoolResponse;
-  const protocolsPayload = (await protocolsResp.json()) as LlamaProtocol[];
-
-  const poolsByProject = new Map<string, LlamaPool[]>();
-  for (const pool of poolsPayload.data) {
-    const list = poolsByProject.get(pool.project) ?? [];
-    list.push(pool);
-    poolsByProject.set(pool.project, list);
-  }
-
-  const protocolsBySlug = new Map<string, LlamaProtocol>();
-  for (const protocol of protocolsPayload) {
-    protocolsBySlug.set(protocol.slug, protocol);
-  }
-
+function buildVaults(vaultPayload: LifiVaultResponse, warnings: string[]): ClarityVault[] {
   const transactionalVaults = vaultPayload.data.filter((vault) => vault.isTransactional);
-  const latestSyncISO = transactionalVaults
-    .map((vault) => vault.analytics.updatedAt ?? null)
-    .filter((value): value is string => Boolean(value))
-    .sort()
-    .at(-1) ?? null;
 
-  const vaults: ClarityVault[] = transactionalVaults.map((vault) => {
+  return transactionalVaults.map((vault) => {
     const mappedProtocolSlug = protocolSlugFrom(vault);
     const meta = protocolMeta[mappedProtocolSlug] ?? protocolMeta[vault.protocol.name] ?? {};
-    const llamaProtocol = protocolsBySlug.get(mappedProtocolSlug);
-    const launchDate = llamaProtocol?.listedAt ? llamaProtocol.listedAt * 1000 : null;
-    const matchedPool = matchLlamaPool(vault, poolsByProject);
+    const launchDate = vault.syncedAt ? new Date(vault.syncedAt).getTime() : null;
     const lock = resolveLockCategory(vault);
-    const breakdown = buildAPYBreakdown(vault, matchedPool, meta);
+    const breakdown = buildAPYBreakdown(vault, meta);
+    const tvlUsd = asNumber(vault.analytics.tvl.usd, 0);
     const safety = computeSafetyRating({
       launchDate,
       auditCount: asNumber(meta.auditCount, 0),
       exploitHistory: meta.exploitHistory ?? "unknown",
-      tvlUsd: asNumber(matchedPool?.tvlUsd, asNumber(vault.analytics.tvl.usd, 0)),
+      tvlUsd,
       apyCurrent: breakdown.total,
-      apyMean30d: asNumber(matchedPool?.apyMean30d, breakdown.total),
+      apyMean30d: normalizeApy(vault.analytics.apy30d) || breakdown.total,
       lockCategory: lock.category,
       meta,
     });
@@ -561,9 +501,7 @@ export async function fetchClaritySnapshot(): Promise<ClaritySnapshot> {
     const name = buildVaultName(symbol, safety.label);
     const incentiveEndDateLabel = formatDateLabel(breakdown.incentiveEndDate);
     if (!incentiveEndDateLabel && breakdown.incentive > 0) {
-      warnings.push(
-        `Incentive end date unavailable for ${vault.protocol.name} ${symbol}. DeFiLlama emission endpoint is paid.`,
-      );
+      warnings.push(`Incentive end date unavailable for ${vault.protocol.name} ${symbol}.`);
     }
 
     return {
@@ -574,6 +512,7 @@ export async function fetchClaritySnapshot(): Promise<ClaritySnapshot> {
       protocolSlug: mappedProtocolSlug,
       protocolDisplayName: meta.displayName ?? vault.protocol.name,
       protocolUrl: vault.protocol.url,
+      protocolLogoPath: protocolLogoPath(mappedProtocolSlug),
       plainEnglishName: name,
       tradfiAnalogy: meta.tradfiAnalogy ?? "Like a savings product with market-linked returns",
       lockCategory: lock.category,
@@ -581,10 +520,10 @@ export async function fetchClaritySnapshot(): Promise<ClaritySnapshot> {
       launchDate,
       launchYearLabel: launchInfo.label,
       yearsLive: launchInfo.yearsLive,
-      tvlUsd: asNumber(matchedPool?.tvlUsd, asNumber(vault.analytics.tvl.usd, 0)),
-      tvlTrendLabel: tvlTrendLabel(matchedPool),
+      tvlUsd,
+      tvlTrendLabel: tvlTrendLabel(tvlUsd),
       depositUrl: vault.protocol.url,
-      llamaPoolId: matchedPool?.pool ?? null,
+      llamaPoolId: null,
       headlineAPY: breakdown.total,
       apyBreakdown: breakdown,
       safetyRating: safety,
@@ -598,12 +537,39 @@ export async function fetchClaritySnapshot(): Promise<ClaritySnapshot> {
       apyType: resolveAPYType(breakdown),
     };
   });
+}
+
+export async function fetchClaritySnapshot(cursor?: string | null): Promise<ClaritySnapshot> {
+  const warnings: string[] = [];
+  const params = new URLSearchParams({
+    limit: String(LIFI_PAGE_SIZE),
+    sortBy: "tvl",
+  });
+  if (cursor) {
+    params.set("cursor", cursor);
+  }
+
+  const vaultsResp = await fetch(`${LIFI_VAULTS_ENDPOINT}?${params}`);
+
+  if (!vaultsResp.ok) {
+    throw new Error(`LI.FI vault request failed with status ${vaultsResp.status}`);
+  }
+
+  const vaultPayload = (await vaultsResp.json()) as LifiVaultResponse;
+  const transactionalVaults = vaultPayload.data.filter((vault) => vault.isTransactional);
+  const latestSyncISO = transactionalVaults
+    .map((vault) => vault.analytics.updatedAt ?? vault.syncedAt ?? null)
+    .filter((value): value is string => Boolean(value))
+    .sort()
+    .at(-1) ?? null;
 
   return {
-    vaults,
+    vaults: buildVaults(vaultPayload, warnings),
     fetchedAt: Date.now(),
     latestSyncISO,
     warnings: [...new Set(warnings)],
+    nextCursor: vaultPayload.nextCursor ?? null,
+    totalVaults: vaultPayload.total ?? null,
   };
 }
 

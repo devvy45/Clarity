@@ -32,14 +32,6 @@ function chipClass(active: boolean): string {
   );
 }
 
-export const defaultFilters: DashboardFilters = {
-  risk: "all",
-  lock: "any",
-  age: "any",
-  apyType: "all",
-  sort: "highest_return",
-};
-
 export function FilterBar({ filters, onChange }: FilterBarProps) {
   return (
     <section className="mb-6 border-b border-border pb-5">

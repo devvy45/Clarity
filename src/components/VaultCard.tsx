@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Area,
@@ -67,38 +67,28 @@ export function VaultCard({ vault, index }: VaultCardProps) {
   const [chartError, setChartError] = useState<string | null>(null);
   const styles = riskStyle(vault.safetyRating.tier);
 
-  useEffect(() => {
-    if (!showAdvanced || !vault.llamaPoolId || chartData.length > 0 || chartLoading) {
+  function handleDetailsToggle() {
+    const nextShowAdvanced = !showAdvanced;
+    setShowAdvanced(nextShowAdvanced);
+
+    if (!nextShowAdvanced || !vault.llamaPoolId || chartData.length > 0 || chartLoading) {
       return;
     }
-    let active = true;
+
     setChartLoading(true);
     setChartError(null);
 
     void fetchVaultChart(vault.llamaPoolId)
       .then((data) => {
-        if (!active) {
-          return;
-        }
         setChartData(data);
       })
       .catch(() => {
-        if (!active) {
-          return;
-        }
         setChartError("Could not load APY history right now.");
       })
       .finally(() => {
-        if (!active) {
-          return;
-        }
         setChartLoading(false);
       });
-
-    return () => {
-      active = false;
-    };
-  }, [showAdvanced, vault.llamaPoolId, chartData.length, chartLoading]);
+  }
 
   const apyTags = useMemo(() => {
     const tags: Array<{ label: string; className: string }> = [];
@@ -163,14 +153,23 @@ export function VaultCard({ vault, index }: VaultCardProps) {
       className={`rounded-[8px] border border-border ${styles.border} ${styles.tint} p-5 shadow-card transition-transform duration-200 hover:-translate-y-[2px] hover:shadow-hover`}
     >
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-[0.06em] text-text-secondary">
-            {vault.protocolDisplayName}
-          </p>
-          <h3 className="mt-1 font-display text-[26px] leading-[1.15] text-text-primary">
-            {vault.plainEnglishName}
-          </h3>
-          <p className="mt-1 text-sm text-text-secondary">{vault.launchYearLabel}</p>
+        <div className="flex min-w-0 items-start gap-3">
+          {vault.protocolLogoPath && (
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[8px] border border-border bg-white p-2">
+              <img
+                src={vault.protocolLogoPath}
+                alt=""
+                className="max-h-full max-w-full object-contain"
+                loading="lazy"
+              />
+            </div>
+          )}
+          <div className="min-w-0">
+            <h3 className="font-display text-[26px] leading-[1.15] text-text-primary">
+              {vault.plainEnglishName}
+            </h3>
+            <p className="mt-1 text-sm text-text-secondary">{vault.launchYearLabel}</p>
+          </div>
         </div>
         <div className={`rounded-[999px] border px-3 py-1 text-sm font-semibold ${styles.badge}`}>
           {vault.safetyRating.label}
@@ -211,7 +210,7 @@ export function VaultCard({ vault, index }: VaultCardProps) {
         <button
           type="button"
           className="inline-flex items-center gap-1 text-sm font-medium text-accent hover:text-accent-hover"
-          onClick={() => setShowAdvanced((current) => !current)}
+          onClick={handleDetailsToggle}
         >
           {showAdvanced ? "Hide details" : "Show details"}
           {showAdvanced ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
